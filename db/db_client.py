@@ -29,15 +29,15 @@ class db_client():
         db = pymysql.connect(host=self.host, port=self.port, user=self.db_username, passwd=self.db_password,
                              charset='utf8')
         cursor = db.cursor()
-        cursor.execute("drop database if exists " + self.db_name)
-        create_db_sql = "create database " + self.db_name
+        # cursor.execute("drop database if exists " + self.db_name)
+        create_db_sql = "Create Database If Not Exists " + self.db_name
         cursor.execute(create_db_sql)
         use_db_sql = "use " + self.db_name
         cursor.execute(use_db_sql)
-        cursor.execute("drop table if exists `user`")
-        cursor.execute("drop table if exists `word`")
+        # cursor.execute("drop table if exists `user`")
+        # cursor.execute("drop table if exists `word`")
         create_table_sql1 = """
-        CREATE TABLE `user`(
+        CREATE TABLE if not exists `user`(
             id INT PRIMARY KEY AUTO_INCREMENT COMMENT "用户id",
             uid VARCHAR(36) NOT NULL UNIQUE COMMENT "用户uuid",
             username VARCHAR(81) NOT NULL COMMENT "用户名",
@@ -45,7 +45,7 @@ class db_client():
         ) ENGINE=INNODB DEFAULT CHARSET utf8 COMMENT = "用户表";
         """
         create_table_sql2 = """
-        CREATE TABLE `word`(
+        CREATE TABLE if not exists `word`(
             word_uid INT PRIMARY KEY AUTO_INCREMENT COMMENT "单词id",
             user_uid VARCHAR(36) NOT NULL COMMENT "用户uid",
             word VARCHAR(81) NOT NULL COMMENT "单词英文",
@@ -179,9 +179,11 @@ class db_client():
         return data
 
     # 根据日期获取单词
-    def select_word_by_date(self, uuid, year=None, month=None, day=None):
+    def select_word_by_date(self, uuid, page, page_size, year=None, month=None, day=None):
         db = self.__get_connect()
         cursor = db.cursor()
+        # page_size = 30
+        begin = page_size * page
         sql = "select * from `word` where user_uid='{uuid}'".format(uuid=uuid)
         try:
             if year != None:
@@ -190,10 +192,12 @@ class db_client():
                     sql = sql + " and `month`=" + month
                     if day != None:
                         sql = sql + " and `day`=" + day
+                sql = sql + " LIMIT {begin},{pageSize}".format(begin=begin, pageSize=page_size)
                 cursor.execute(sql)
                 data = cursor.fetchall()
                 return data
             else:
+                sql = sql + "LIMIT {begin},{pageSize}".format(begin=begin, pageSize=page_size)
                 cursor.execute(sql)
                 data = cursor.fetchall()
                 return data
@@ -212,9 +216,24 @@ class db_client():
                     sql = sql + " and `month`=" + month
                     if day != None:
                         sql = sql + " and `day`=" + day
+                cursor.execute(sql)
+                data = cursor.fetchone()
+                return data
             else:
                 cursor.execute(sql)
                 data = cursor.fetchone()
                 return data
         finally:
             db.close()
+
+    def is_username_exist(self, username):
+        db = self.__get_connect()
+        cursor = db.cursor()
+        sql = "select * from `user` where username='{username}'".format(username=username)
+        cursor.execute(sql)
+        data = cursor.fetchone()
+        db.close()
+        if data == None:
+            return False
+        else:
+            return True
