@@ -2,16 +2,20 @@
 db_host: 127.0.0.1
 # mysql数据库连接端口，默认3306，一般不用改
 db_port: 3306
-# 数据库名称，默认为image_database
+# 数据库名称，默认为word_web
 db_name: word_web
 # 数据库用户名
 db_username: root
 # 数据库密码
-db_password: srx62600
+db_password: 123456
 # 服务器host，如果是发布到服务器上就填0.0.0.0，如果是在自己本机上跑都直接默认的127.0.0.1就可以了
 server_host: 127.0.0.1
 # 服务器port，选择一个自己服务器【本机】上没有被占用的端口即可，默认5555
 server_port: 5656
+# 百度翻译appid
+appid: your_appid
+# 百度翻译key
+key: your_key
 
 
 

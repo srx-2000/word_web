@@ -1,7 +1,6 @@
-import os
 import logging
+import os
 import platform
-
 from logging.handlers import TimedRotatingFileHandler
 
 # 日志级别
@@ -15,9 +14,11 @@ DEBUG = 10
 NOTSET = 0
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
-ROOT_PATH = os.path.join(CURRENT_PATH, os.pardir)
+ROOT_PATH = os.path.dirname(CURRENT_PATH)
 LOG_PATH = os.path.join(ROOT_PATH, 'log')
-
+print(ROOT_PATH)
+print(LOG_PATH)
+print(CURRENT_PATH)
 if not os.path.exists(LOG_PATH):
     try:
         os.mkdir(LOG_PATH)

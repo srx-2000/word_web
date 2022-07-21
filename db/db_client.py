@@ -1,4 +1,5 @@
 import pymysql
+
 from util.Config_loader import Config_loader
 
 
@@ -50,6 +51,7 @@ class db_client():
             user_uid VARCHAR(36) NOT NULL COMMENT "用户uid",
             word VARCHAR(81) NOT NULL COMMENT "单词英文",
             mean VARCHAR(255) NOT NULL COMMENT "单词中文意思",
+            memory_way VARCHAR(255) COMMENT "单词记忆方法，对应百度翻译词根，可为空",
             `year` INT NOT NULL COMMENT "单词存储年份",
             `month` INT NOT NULL COMMENT "单词存储月份",
             `day` INT NOT NULL COMMENT "单词存储日份",
@@ -67,7 +69,6 @@ class db_client():
         sql = "insert into `user`(username,password,uid) values " \
               "('{username}','{password}','{user_uuid}')" \
             .format(username=username, password=password, user_uuid=user_uuid)
-        # sql = sql.replace("\\", "\\\\")
         cursor.execute(sql)
         db.commit()
         data = self.select_single_user_by_id(user_uuid)
@@ -80,12 +81,12 @@ class db_client():
             db.close()
 
     # 插入一个单词
-    def insert_word(self, user_uid, word, mean, year, month, day):
+    def insert_word(self, user_uid, word, mean, memory_way, year, month, day):
         db = self.__get_connect()
         cursor = db.cursor()
-        sql = "insert into `word`(user_uid,word,mean,`year`,`month`,`day`) values " \
-              "('{user_uid}','{word}','{mean}','{year}','{month}','{day}')" \
-            .format(user_uid=user_uid, word=word, mean=mean, year=year, month=month, day=day)
+        sql = "insert into `word`(user_uid,word,mean,memory_way,`year`,`month`,`day`) values " \
+              "('{user_uid}','{word}','{mean}','{memory_way}','{year}','{month}','{day}')" \
+            .format(user_uid=user_uid, word=word, mean=mean, memory_way=memory_way, year=year, month=month, day=day)
         cursor.execute(sql)
         word_id = cursor.lastrowid
         db.commit()
@@ -98,21 +99,32 @@ class db_client():
         finally:
             db.close()
 
-    # 删除一个单词
-    def delete_single_word(self, word, mean, user_uuid, year, month, day):
+    # 更新一个单词
+    def update_word(self, word_id, user_uid, word, mean, memory_way):
         db = self.__get_connect()
         cursor = db.cursor()
-        sql = 'UPDATE word SET `status`="-1" WHERE word="{word}" AND user_uid="{user_uuid}" AND mean="{mean}"' \
-              ' AND `year`="{year}"AND `month`="{month}"AND `day`="{day}"'.format(word=word, user_uuid=user_uuid,
-                                                                                  mean=mean, year=year, month=month,
-                                                                                  day=day)
+        sql = f"UPDATE `word` SET word='{word}',mean='{mean}',memory_way='{memory_way}' WHERE word_uid='{word_id}' AND user_uid='{user_uid}'"
+        try:
+            result = cursor.execute(sql)
+            db.commit()
+            return result
+        except Exception as e:
+            db.rollback()
+        finally:
+            db.close()
+
+    # 删除一个单词
+    def delete_single_word(self, word_id, word, mean, memory_way, user_uuid, year, month, day):
+        db = self.__get_connect()
+        cursor = db.cursor()
+        sql = f"UPDATE word SET `status`='-1' WHERE word_uid='{word_id}'"
         cursor.execute(sql)
         db.commit()
         # 查看更新后的结果
-        data = self.select_single_word(word, mean, user_uuid, year, month, day)
+        data = self.select_single_word(word, mean, memory_way, user_uuid, year, month, day)
         try:
             if data != None:
-                if data[-1] != "-1":
+                if data[-1] == -1:
                     return True
                 else:
                     return False
@@ -128,6 +140,18 @@ class db_client():
         sql = "select * from `user` where uid='%s'" % (user_uuid)
         cursor.execute(sql)
         data = cursor.fetchone()
+        db.close()
+        return data
+
+    def search_word(self, user_uuid, word_prefix, prefix_type, status=1):
+        db = self.__get_connect()
+        cursor = db.cursor()
+        if prefix_type == 1:
+            sql = f"select * from `word` where user_uid='{user_uuid}' and status='{status}' and word like '%{word_prefix}%'"
+        else:
+            sql = f"select * from `word` where user_uid='{user_uuid}' and status='{status}' and mean like '%{word_prefix}%'"
+        cursor.execute(sql)
+        data = cursor.fetchall()
         db.close()
         return data
 
@@ -153,16 +177,18 @@ class db_client():
         return data
 
     # 查询单个单词
-    def select_single_word(self, word, mean, user_uuid, year, month, day):
+    def select_single_word(self, word, mean, memory_way, user_uuid, year, month, day):
         db = self.__get_connect()
         cursor = db.cursor()
         sql = "select * from `word` where user_uid='{user_uuid}' and word='{word}' " \
-              "and mean='{mean}' and `year` ='{year}'and `month` ='{month}'and `day` ='{day}'".format(word=word,
-                                                                                                      mean=mean,
-                                                                                                      year=year,
-                                                                                                      month=month,
-                                                                                                      day=day,
-                                                                                                      user_uuid=user_uuid)
+              "and mean='{mean}' and `memory_way` ='{memory_way}' and `year` ='{year}'and `month` ='{month}" \
+              "'and `day` ='{day}'".format(word=word,
+                                           mean=mean,
+                                           year=year,
+                                           month=month,
+                                           day=day,
+                                           memory_way=memory_way,
+                                           user_uuid=user_uuid)
         cursor.execute(sql)
         data = cursor.fetchone()
         db.close()
@@ -179,12 +205,13 @@ class db_client():
         return data
 
     # 根据日期获取单词
-    def select_word_by_date(self, uuid, page, page_size, year=None, month=None, day=None):
+    def select_word_by_date(self, uuid, page, page_size, year=None, month=None, day=None, status=1):
         db = self.__get_connect()
         cursor = db.cursor()
         # page_size = 30
         begin = page_size * page
         sql = "select * from `word` where user_uid='{uuid}'".format(uuid=uuid)
+        sql = sql + f" and `status` = {status}"
         try:
             if year != None:
                 sql = sql + " and `year`=" + year
@@ -197,7 +224,7 @@ class db_client():
                 data = cursor.fetchall()
                 return data
             else:
-                sql = sql + "LIMIT {begin},{pageSize}".format(begin=begin, pageSize=page_size)
+                sql = sql + " LIMIT {begin},{pageSize}".format(begin=begin, pageSize=page_size)
                 cursor.execute(sql)
                 data = cursor.fetchall()
                 return data
@@ -205,10 +232,11 @@ class db_client():
             db.close()
 
     # 查询用户单词数量
-    def query_count(self, uuid, year=None, month=None, day=None):
+    def query_count(self, uuid, year=None, month=None, day=None, status=1):
         db = self.__get_connect()
         cursor = db.cursor()
         sql = "select count(*) from `word` where user_uid='{uuid}'".format(uuid=uuid)
+        sql = sql + f" and `status` = {status}"
         try:
             if year != None:
                 sql = sql + " and `year`=" + year
@@ -237,3 +265,12 @@ class db_client():
             return False
         else:
             return True
+
+    def get_high_frequency(self, user_id):
+        db = self.__get_connect()
+        cursor = db.cursor()
+        sql = f"SELECT word,mean,memory_way,COUNT(*) AS count_num FROM word WHERE `status`=1 AND user_uid='{user_id}' GROUP BY word,mean,memory_way HAVING count_num>1 ORDER BY count_num DESC"
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        db.close()
+        return data
